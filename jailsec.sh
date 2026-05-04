@@ -221,6 +221,7 @@ EOF
 
 sysrc -f "$JAIL_RC" pf_enable="YES"
 sysrc -f "$JAIL_RC" pf_rules="/etc/pf.conf"
+sysrc -f "$JAIL_RC" gateway_enable="YES"
 
 echo "PF configuration installed and enabled in jail."
 
