@@ -138,17 +138,17 @@ tar -xf "$FETCH_DEST" -C "$JAIL_PATH"
 
 echo "Configuring Network Interfaces..."
 
-sudo ifconfig bridge0 create >/dev/null 2>&1
-sudo ifconfig epair0 create >/dev/null 2>&1
+ifconfig bridge0 create >/dev/null 2>&1
+ifconfig epair0 create >/dev/null 2>&1
 
-sudo ifconfig bridge0 up
-sudo ifconfig epair0b inet $GATEWAY_IP netmask 255.255.255.0 up
-sudo ifconfig bridge0 addm epair0b addm epair0a inet 10.0.0.2/24 up
+ifconfig bridge0 up
+ifconfig epair0b inet $GATEWAY_IP netmask 255.255.255.0 up
+ifconfig bridge0 addm epair0b addm epair0a inet 10.0.0.2/24 up
 
-sudo sysrc cloned_interfaces+="bridge0 epair0"
-sudo sysrc ifconfig_bridge0=" addm epair0b addm epair0a inet 10.0.0.2/24 up"
-sudo sysrc ifconfig_epair0b="up"
-sudo sysrc ifconfig_epair0a="inet 10.0.0.2 netmask 255.255.255.0 up"
+sysrc cloned_interfaces+="bridge0 epair0"
+sysrc ifconfig_bridge0=" addm epair0b addm epair0a inet 10.0.0.2/24 up"
+sysrc ifconfig_epair0b="up"
+sysrc ifconfig_epair0a="inet 10.0.0.2 netmask 255.255.255.0 up"
 
 echo "Updating $CONF_FILE..."
 cat <<EOF >> $CONF_FILE
@@ -171,9 +171,9 @@ echo "Setting up networking inside $JAIL_NAME/etc/rc.conf..."
 JAIL_RC="$JAIL_PATH/etc/rc.conf"
 touch "$JAIL_RC"
 
-sudo sysrc -f "$JAIL_RC" ifconfig_epair0b="inet $JAIL_IP netmask 255.255.255.0"
-sudo sysrc defaultrouter="$GATEWAY_IP"
-sudo sysrc jail_enable="YES"
+sysrc -f "$JAIL_RC" ifconfig_epair0b="inet $JAIL_IP netmask 255.255.255.0"
+sysrc defaultrouter="$GATEWAY_IP"
+sysrc jail_enable="YES"
 echo "Configuring PF firewall inside $JAIL_NAME..."
 
 JAIL_PF="$JAIL_PATH/etc/pf.conf"
@@ -218,9 +218,9 @@ pass in quick on \$int_if from { \$j_all, \$j6_net } to any keep state
 pass out quick on \$int_if to { \$j_all, \$j6_net } keep state
 EOF
 
-sudo sysrc -f "$JAIL_RC" pf_enable="YES"
-sudo sysrc -f "$JAIL_RC" pf_rules="/etc/pf.conf"
-sudo sysrc -f "$JAIL_RC" gateway_enable="YES"
+sysrc -f "$JAIL_RC" pf_enable="YES"
+sysrc -f "$JAIL_RC" pf_rules="/etc/pf.conf"
+sysrc -f "$JAIL_RC" gateway_enable="YES"
 
 echo "PF configuration installed and enabled in jail."
 
