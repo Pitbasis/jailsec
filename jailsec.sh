@@ -122,8 +122,7 @@ printf "Select number: "
 read IFACE_NUM
 EXT_IF=$(eval echo \$iface_$IFACE_NUM)
 echo "$EXT_IF"
-printf "Enter Jail IP (e.g., 10.0.0.1): "
-read JAIL_IP
+JAIL_IP="10.0.0.1"
 
 mkdir -p "$JAIL_PATH"
 
