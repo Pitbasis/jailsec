@@ -174,7 +174,7 @@ touch "$JAIL_RC"
 
 sysrc -f "$JAIL_RC" ifconfig_epair0b="inet $JAIL_IP netmask 255.255.255.0"
 sysrc defaultrouter="$GATEWAY_IP"
-
+sysrc jail_enable="YES"
 echo "Configuring PF firewall inside $JAIL_NAME..."
 
 JAIL_PF="$JAIL_PATH/etc/pf.conf"
