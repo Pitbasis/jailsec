@@ -2,15 +2,15 @@
 
 if [ "$1" = "-scan" ]; then
   if [ -z "$2" ]; then
-  echo "|--------------------------------|"
-  echo "|                                |"
-  echo "| -scan [wlan0/re0] [jail_name]  |"
-  echo "|                                |"
-  echo "|_______________or_______________|"
-  echo "|                                |" 
-  echo "| -scan [wlan0/re0]              |"
-  echo "|                                |"
-  echo "|________________________________|"
+    echo "|--------------------------------|"
+    echo "|                                |"
+    echo "| -scan [wlan0/re0] [jail_name]  |"
+    echo "|                                |"
+    echo "|_______________or_______________|"
+    echo "|                                |" 
+    echo "| -scan [wlan0/re0]              |"
+    echo "|                                |"
+    echo "|________________________________|"
   fi
   if [ -n  "$2" ] && [ -z "$3" ]; then
      wifi="$2"
@@ -26,6 +26,7 @@ if [ "$1" = "-scan" ]; then
      212.73.87.0/24
      178.160.192.0/18
      34.107.0.0/16
+     107.178.0.0/15
      "
 
      IGNORE_IPS=$(sudo sockstat -46c | awk 'NR>1 {print $7}' | rev | cut -d: -f2- | rev | grep -v '^\*$' | sort -u)
@@ -104,6 +105,10 @@ FETCH_DEST="/tmp/base.txz"
 CONF_FILE="/etc/jail.conf"
 GATEWAY_IP="10.0.0.2"
 
+# Self-installation to /usr/local/bin
+echo "Installing jailsec to /usr/local/bin..."
+sudo install -m 755 "$0" /usr/local/bin/jailsec
+
 printf "Enter the full path for the jail (e.g., /tmp/jails/j1_pf): "
 read JAIL_PATH
 [ -z "$JAIL_PATH" ] && exit 1
@@ -138,20 +143,21 @@ tar -xf "$FETCH_DEST" -C "$JAIL_PATH"
 
 echo "Configuring Network Interfaces..."
 
-ifconfig bridge0 create >/dev/null 2>&1
-ifconfig epair0 create >/dev/null 2>&1
+# Explicitly create interfaces first
+sudo ifconfig bridge0 create >/dev/null 2>&1
+sudo ifconfig epair0 create >/dev/null 2>&1
 
-ifconfig bridge0 up
-ifconfig epair0b inet $GATEWAY_IP netmask 255.255.255.0 up
-ifconfig bridge0 addm epair0b addm epair0a inet 10.0.0.2/24 up
+sudo ifconfig bridge0 up
+sudo ifconfig epair0b inet $GATEWAY_IP netmask 255.255.255.0 up
+sudo ifconfig bridge0 addm epair0b addm epair0a up
 
-sysrc cloned_interfaces+="bridge0 epair0"
-sysrc ifconfig_bridge0=" addm epair0b addm epair0a inet 10.0.0.2/24 up"
-sysrc ifconfig_epair0b="up"
-sysrc ifconfig_epair0a="inet 10.0.0.2 netmask 255.255.255.0 up"
+sudo sysrc cloned_interfaces+="bridge0 epair0"
+sudo sysrc ifconfig_bridge0="addm epair0a inet $GATEWAY_IP/24 up"
+sudo sysrc ifconfig_epair0b="up"
+sudo sysrc ifconfig_epair0a="up"
 
 echo "Updating $CONF_FILE..."
-cat <<EOF >> $CONF_FILE
+cat <<EOF | sudo tee -a $CONF_FILE
 
 $JAIL_NAME {
     host.hostname = "$JAIL_NAME";
@@ -169,58 +175,34 @@ EOF
 
 echo "Setting up networking inside $JAIL_NAME/etc/rc.conf..."
 JAIL_RC="$JAIL_PATH/etc/rc.conf"
-touch "$JAIL_RC"
+sudo touch "$JAIL_RC"
 
-sysrc -f "$JAIL_RC" ifconfig_epair0b="inet $JAIL_IP netmask 255.255.255.0"
-sysrc defaultrouter="$GATEWAY_IP"
-sysrc jail_enable="YES"
+sudo sysrc -f "$JAIL_RC" ifconfig_epair0b="inet $JAIL_IP netmask 255.255.255.0"
+sudo sysrc -f "$JAIL_RC" defaultrouter="$GATEWAY_IP"
+sudo sysrc -f "$JAIL_RC" jail_enable="YES"
+
 echo "Configuring PF firewall inside $JAIL_NAME..."
-
 JAIL_PF="$JAIL_PATH/etc/pf.conf"
 
-cat <<EOF > "$JAIL_PF"
+cat <<EOF | sudo tee "$JAIL_PF"
 ext_if = "$EXT_IF"
 int_if = "epair0b"
-j6_net = "192.168.100.0/24"
 j_all  = "10.0.0.0/8"
 
 set skip on lo0
 set block-policy drop
 set optimization aggressive
-set limit { states 20000, frags 5000 }
 
-scrub out on \$ext_if all min-ttl 64
-
-nat on \$ext_if from { \$j_all, \$j6_net } to any -> (\$ext_if)
+nat on \$ext_if from \$j_all to any -> (\$ext_if)
 
 block in on \$ext_if all
-
-antispoof quick for \$ext_if
-
-pass in quick on \$ext_if inet proto udp from any port 67 to any port 68 keep state
-
-block drop in quick on \$ext_if proto tcp flags FUP/WEUAPRSF
-block drop in quick on \$ext_if proto tcp flags /WEUAPRSF
-block drop in quick on \$ext_if proto tcp flags SR/SR
-block drop in quick on \$ext_if proto tcp flags SF/SF
-
-block in quick on \$ext_if proto tcp from any to any port 22
-
-block drop in quick on \$int_if to (\$int_if)
-block drop in quick on \$int_if to (\$ext_if)
-
-block drop in quick inet proto icmp to { (\$ext_if), (\$int_if) } icmp-type echoreq
-
-pass out quick on \$ext_if proto tcp from (\$ext_if) to any flags any keep state
-pass out quick on \$ext_if proto { udp, icmp } from (\$ext_if) to any keep state
-
-pass in quick on \$int_if from { \$j_all, \$j6_net } to any keep state
-pass out quick on \$int_if to { \$j_all, \$j6_net } keep state
+pass out quick on \$ext_if proto { tcp, udp, icmp } from any to any keep state
+pass in quick on \$int_if from \$j_all to any keep state
 EOF
 
-sysrc -f "$JAIL_RC" pf_enable="YES"
-sysrc -f "$JAIL_RC" pf_rules="/etc/pf.conf"
-sysrc -f "$JAIL_RC" gateway_enable="YES"
+sudo sysrc -f "$JAIL_RC" pf_enable="YES"
+sudo sysrc -f "$JAIL_RC" pf_rules="/etc/pf.conf"
+sudo sysrc -f "$JAIL_RC" gateway_enable="YES"
 
 echo "PF configuration installed and enabled in jail."
 
@@ -232,10 +214,8 @@ echo "Gateway:    $GATEWAY_IP (on bridge0)"
 echo "------------------------------------------------"
 echo "To start the jail: service jail start $JAIL_NAME"
 echo "To try DHCP later inside jail: jexec $JAIL_NAME dhclient epair0b"
-
 echo ""
-echo "To scan the network, use -scan"
-echo ""
-jailsec -scan
+echo "You can now run 'jailsec' from anywhere."
+echo "To scan the network, use: jailsec -scan"
 echo ""
 fi
